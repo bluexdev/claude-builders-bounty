@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import sys
 import urllib.error
 import urllib.request
@@ -27,7 +28,9 @@ RISKY_PATTERNS = (
     ("destructive shell or git operations", re.compile(r"(?i)\b(rm\s+(?=[^;&|\n]*(?:-[A-Za-z]*r|--recursive))(?=[^;&|\n]*(?:-[A-Za-z]*f|--force))[^;&|\n]*|git\s+push\b[^\n;&|]*(?:--force|-f\b))")),
     ("secret or environment handling", re.compile(r"(?i)\b(secret|api[_-]?key|process\.env|env\.)\b|\.env\b")),
 )
-TEST_PATH_RE = re.compile(r"(?i)(^|/)(test_[^/]*|[^/]*(_test|\.test|\.spec)|__tests__|tests?)(/|\.|$)")
+TEST_PATH_RE = re.compile(
+    r"(?i)(^|/)(__tests__|tests?|test_[^/]*|[^/]*_(?:test|spec)\.[^/]+|[^/]*\.(?:test|spec)\.[^/]+)(/|$)"
+)
 DIFF_HEADER_PREFIX = "diff --git a/"
 DIFF_HEADER_SEPARATOR = " b/"
 
@@ -120,19 +123,21 @@ def validate_diff_response(text: str) -> str:
     return text
 
 
-def strip_prefix(value: str, prefix: str) -> str:
-    if value.startswith(prefix):
-        return value[len(prefix):]
-    return value
-
-
 def path_from_diff_header(line: str) -> Optional[str]:
-    if not line.startswith(DIFF_HEADER_PREFIX):
+    if not line.startswith("diff --git "):
         return None
-    rest = line[len(DIFF_HEADER_PREFIX):]
-    if DIFF_HEADER_SEPARATOR not in rest:
+    rest = line[len("diff --git "):]
+    if rest.startswith(("'", '"')):
+        try:
+            parts = shlex.split(rest)
+        except ValueError:
+            return None
+        if len(parts) >= 2 and parts[1].startswith("b/"):
+            return parts[1][2:]
         return None
-    return rest.split(DIFF_HEADER_SEPARATOR, 1)[1]
+    if not rest.startswith("a/") or DIFF_HEADER_SEPARATOR not in rest:
+        return None
+    return rest[len("a/"):].split(DIFF_HEADER_SEPARATOR, 1)[1]
 
 
 def parse_diff(owner: str, repo: str, number: str, raw_diff: str) -> PullRequestDiff:
@@ -159,7 +164,7 @@ def parse_diff(owner: str, repo: str, number: str, raw_diff: str) -> PullRequest
     for line in raw_diff.splitlines():
         if line.startswith("diff --git "):
             finish_file()
-            fallback_path = path_from_diff_header(line) or strip_prefix(line.rsplit(" ", 1)[-1], "b/")
+            fallback_path = path_from_diff_header(line)
             continue
         if line.startswith("+++ "):
             marker = line[4:]
@@ -207,7 +212,7 @@ def detect_risks(pr: PullRequestDiff) -> List[str]:
             risks.append(f"- Review {label}; the diff contains related paths or commands.")
 
     if not has_test_file(pr):
-        risks.append("- No test file or test command change is visible, so behavior may rely on manual verification.")
+        risks.append("- No test file change is visible, so behavior may rely on manual verification.")
 
     large_files = [file for file in pr.files if file.added + file.deleted > 250]
     if large_files:

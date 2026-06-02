@@ -65,6 +65,10 @@ def test_path_from_diff_header_uses_first_separator() -> None:
         review.path_from_diff_header("diff --git a/src/old name.py b/src/new b name.py")
         == "src/new b name.py"
     )
+    assert (
+        review.path_from_diff_header('diff --git "a/src/old name.py" "b/src/new name.py"')
+        == "src/new name.py"
+    )
     assert review.path_from_diff_header("not a diff header") is None
 
 
@@ -107,6 +111,17 @@ def test_test_detection_uses_paths_only() -> None:
             raw_diff="",
         )
     )
+    assert not review.has_test_file(
+        review.PullRequestDiff(
+            owner="owner",
+            repo="repo",
+            number="6",
+            title="owner/repo#6",
+            files=(review.ChangedFile("docs/foo.specification.md", 1, 0),),
+            added_lines=(),
+            raw_diff="",
+        )
+    )
 
 
 def test_risks_use_added_lines_not_removed_lines() -> None:
@@ -120,6 +135,21 @@ index 1111111..2222222 100644
 """
     parsed = review.parse_diff("owner", "repo", "3", raw)
     assert not any("destructive shell" in risk for risk in review.detect_risks(parsed))
+
+
+def test_missing_test_risk_mentions_test_files_only() -> None:
+    parsed = review.PullRequestDiff(
+        owner="owner",
+        repo="repo",
+        number="7",
+        title="owner/repo#7",
+        files=(review.ChangedFile("src/app.py", 1, 0),),
+        added_lines=("print('hello')",),
+        raw_diff="",
+    )
+    risks = "\n".join(review.detect_risks(parsed))
+    assert "No test file change is visible" in risks
+    assert "test command" not in risks
 
 
 def test_risk_detection_catches_shell_variants() -> None:
@@ -172,6 +202,7 @@ def main() -> int:
     test_path_from_diff_header_uses_first_separator()
     test_test_detection_uses_paths_only()
     test_risks_use_added_lines_not_removed_lines()
+    test_missing_test_risk_mentions_test_files_only()
     test_risk_detection_catches_shell_variants()
     test_validate_diff_response_rejects_json_payload()
     test_parse_pr_url_includes_invalid_input()
