@@ -3,31 +3,28 @@
 
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
-
-
-MODULE_PATH = Path(__file__).with_name("block-destructive-bash.py")
-SPEC = importlib.util.spec_from_file_location("block_destructive_bash", MODULE_PATH)
-assert SPEC and SPEC.loader
-guard = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(guard)
+import block_destructive_bash as guard
 
 
 BLOCKED = [
     "rm -rf build",
     "rm -fr build",
+    "rm --recursive --force build",
+    "rm -r --force build",
+    "rm --force -r build",
     "psql -c 'DROP TABLE users'",
     "sqlite3 app.db 'TRUNCATE audit_log'",
     "git push --force origin main",
     "git push -f origin main",
     "git push --force-with-lease origin main",
     "sqlite3 app.db 'DELETE FROM users'",
+    "sqlite3 app.db 'DELETE FROM users' | grep where",
 ]
 
 ALLOWED = [
     "git status",
     "rm -r build",
+    "truncate -s 0 file.log",
     "python manage.py migrate",
     "sqlite3 app.db 'DELETE FROM users WHERE id = 1'",
     "git push origin main",

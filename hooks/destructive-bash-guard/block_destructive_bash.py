@@ -14,9 +14,11 @@ from typing import Any
 
 BLOCK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
-        "rm -rf recursively deletes files and is blocked by the destructive Bash guard.",
+        "Recursive forced rm is blocked by the destructive Bash guard.",
         re.compile(
-            r"(?is)(?:^|[\s;&|()])rm\s+(?:(?:-[^\s;]*r[^\s;]*f[^\s;]*)|(?:-[^\s;]*f[^\s;]*r[^\s;]*)|(?:-[^\s;]*r[^\s;]*\s+-[^\s;]*f[^\s;]*)|(?:-[^\s;]*f[^\s;]*\s+-[^\s;]*r[^\s;]*))"
+            r"(?is)(?:^|[\s;&|()])rm\s+"
+            r"(?=[^;&|\n]*?(?:--recursive\b|-[^\s;&|]*r))"
+            r"(?=[^;&|\n]*?(?:--force\b|-[^\s;&|]*f))"
         ),
     ),
     (
@@ -25,7 +27,7 @@ BLOCK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
     (
         "TRUNCATE is destructive SQL and is blocked by the destructive Bash guard.",
-        re.compile(r"(?is)\btruncate\b"),
+        re.compile(r"(?is)\btruncate\s+(?:table\s+)?[a-z_][\w.$\"]*"),
     ),
     (
         "Force-pushing can rewrite shared history and is blocked by the destructive Bash guard.",
@@ -61,14 +63,45 @@ def project_path(payload: dict[str, Any]) -> str:
     return os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
 
 
+def active_quote_before(command: str, index: int) -> str | None:
+    quote: str | None = None
+    escaped = False
+    for char in command[:index]:
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\" and quote != "'":
+            escaped = True
+            continue
+        if quote:
+            if char == quote:
+                quote = None
+        elif char in ("'", '"'):
+            quote = char
+    return quote
+
+
+def sql_statement_from(command: str, start: int) -> str:
+    quote = active_quote_before(command, start)
+    for index in range(start, len(command)):
+        char = command[index]
+        if char == ";":
+            return command[start:index]
+        if quote:
+            if char == quote:
+                return command[start:index]
+            continue
+        if char in ("|", "&", "\n"):
+            return command[start:index]
+        if char in ("'", '"'):
+            quote = char
+    return command[start:]
+
+
 def delete_from_without_where(command: str) -> str | None:
-    lowered = command.lower()
-    for match in re.finditer(r"\bdelete\s+from\b", lowered):
-        statement_end = lowered.find(";", match.start())
-        if statement_end == -1:
-            statement_end = len(lowered)
-        statement = lowered[match.start() : statement_end]
-        if not re.search(r"\bwhere\b", statement):
+    for match in re.finditer(r"(?is)\bdelete\s+from\b", command):
+        statement = sql_statement_from(command, match.start())
+        if not re.search(r"(?i)\bwhere\b", statement):
             return "DELETE FROM without a WHERE clause is blocked by the destructive Bash guard."
     return None
 

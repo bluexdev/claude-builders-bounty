@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 
-HOOK_NAME = "block-destructive-bash.py"
+HOOK_NAME = "block_destructive_bash.py"
 HOOK_COMMAND = f"python3 ~/.claude/hooks/{HOOK_NAME}"
 
 
@@ -25,16 +25,18 @@ def load_settings(path: Path) -> dict[str, Any]:
 def merge_hook(settings: dict[str, Any]) -> dict[str, Any]:
     hooks = settings.setdefault("hooks", {})
     pre_tool_use = hooks.setdefault("PreToolUse", [])
-    entry = {
-        "matcher": "Bash",
-        "hooks": [{"type": "command", "command": HOOK_COMMAND}],
-    }
+    hook_entry = {"type": "command", "command": HOOK_COMMAND}
 
     for existing in pre_tool_use:
-        if existing == entry:
+        if not isinstance(existing, dict) or existing.get("matcher") != "Bash":
+            continue
+        existing_hooks = existing.setdefault("hooks", [])
+        if any(hook == hook_entry for hook in existing_hooks):
             return settings
+        existing_hooks.append(hook_entry)
+        return settings
 
-    pre_tool_use.append(entry)
+    pre_tool_use.append({"matcher": "Bash", "hooks": [hook_entry]})
     return settings
 
 
