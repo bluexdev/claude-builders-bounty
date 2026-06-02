@@ -74,6 +74,20 @@ def test_test_detection_uses_paths_only() -> None:
             raw_diff="",
         )
     )
+    assert review.has_test_file(
+        review.PullRequestDiff(
+            owner="owner",
+            repo="repo",
+            number="5",
+            title="owner/repo#5",
+            files=(
+                review.ChangedFile("src/component.test.js", 1, 0),
+                review.ChangedFile("src/component.spec.ts", 1, 0),
+            ),
+            added_lines=(),
+            raw_diff="",
+        )
+    )
 
 
 def test_risks_use_added_lines_not_removed_lines() -> None:

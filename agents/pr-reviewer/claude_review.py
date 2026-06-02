@@ -22,7 +22,7 @@ RISKY_PATTERNS = (
     ("destructive shell or git operations", re.compile(r"(?i)\b(rm\s+[^;&|\n]*-[^\s;&|]*r[^\s;&|]*f|git\s+push\b[^\n;&|]*(?:--force|-f\b))")),
     ("secret or environment handling", re.compile(r"(?i)\b(secret|api[_-]?key|process\.env|env\.)\b|\.env\b")),
 )
-TEST_PATH_RE = re.compile(r"(?i)(^|/)(test_[^/]*|[^/]*(_test|\\.test|\\.spec)|__tests__|tests?)(/|\\.|$)")
+TEST_PATH_RE = re.compile(r"(?i)(^|/)(test_[^/]*|[^/]*(_test|\.test|\.spec)|__tests__|tests?)(/|\.|$)")
 
 
 @dataclass(frozen=True)
@@ -72,6 +72,12 @@ def fetch_diff(owner: str, repo: str, number: str) -> str:
         raise SystemExit(f"GitHub request failed: {exc.reason}") from exc
 
 
+def strip_prefix(value: str, prefix: str) -> str:
+    if value.startswith(prefix):
+        return value[len(prefix):]
+    return value
+
+
 def parse_diff(owner: str, repo: str, number: str, raw_diff: str) -> PullRequestDiff:
     title = f"{owner}/{repo}#{number}"
     files: list[ChangedFile] = []
@@ -96,7 +102,7 @@ def parse_diff(owner: str, repo: str, number: str, raw_diff: str) -> PullRequest
     for line in raw_diff.splitlines():
         if line.startswith("diff --git "):
             finish_file()
-            fallback_path = line.rsplit(" ", 1)[-1].removeprefix("b/")
+            fallback_path = strip_prefix(line.rsplit(" ", 1)[-1], "b/")
             continue
         if line.startswith("+++ "):
             marker = line[4:]
