@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -11,7 +12,11 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, List, Optional, Tuple
+
+
+if sys.version_info < (3, 8):
+    raise SystemExit("claude_review.py requires Python 3.8 or newer.")
 
 
 PR_RE = re.compile(r"^https://github\.com/([^/]+)/([^/]+)/pull/(\d+)(?:[/?#].*)?$")
@@ -19,7 +24,7 @@ RISKY_PATTERNS = (
     ("SQL data destruction handling", re.compile(r"(?i)\b(drop\s+table|truncate\s+(?:table\s+)?\w+|delete\s+from)\b")),
     ("authentication or authorization changes", re.compile(r"(?i)\b(auth|session|permission|role|jwt|oauth)\b")),
     ("billing or payment changes", re.compile(r"(?i)\b(billing|stripe|invoice|payment|checkout)\b")),
-    ("destructive shell or git operations", re.compile(r"(?i)\b(rm\s+[^;&|\n]*-[^\s;&|]*r[^\s;&|]*f|git\s+push\b[^\n;&|]*(?:--force|-f\b))")),
+    ("destructive shell or git operations", re.compile(r"(?i)\b(rm\s+(?=[^;&|\n]*(?:-[A-Za-z]*r|--recursive))(?=[^;&|\n]*(?:-[A-Za-z]*f|--force))[^;&|\n]*|git\s+push\b[^\n;&|]*(?:--force|-f\b))")),
     ("secret or environment handling", re.compile(r"(?i)\b(secret|api[_-]?key|process\.env|env\.)\b|\.env\b")),
 )
 TEST_PATH_RE = re.compile(r"(?i)(^|/)(test_[^/]*|[^/]*(_test|\.test|\.spec)|__tests__|tests?)(/|\.|$)")
@@ -38,12 +43,12 @@ class PullRequestDiff:
     repo: str
     number: str
     title: str
-    files: tuple[ChangedFile, ...]
-    added_lines: tuple[str, ...]
+    files: Tuple[ChangedFile, ...]
+    added_lines: Tuple[str, ...]
     raw_diff: str
 
 
-def parse_pr_url(url: str) -> tuple[str, str, str]:
+def parse_pr_url(url: str) -> Tuple[str, str, str]:
     match = PR_RE.match(url)
     if not match:
         raise SystemExit("Expected a GitHub PR URL like https://github.com/owner/repo/pull/123")
@@ -63,13 +68,28 @@ def fetch_diff(owner: str, repo: str, number: str) -> str:
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             text = response.read().decode("utf-8", errors="replace")
-            if text.lstrip().startswith("<"):
-                raise SystemExit("GitHub returned HTML instead of a diff; check authentication or PR visibility.")
-            return text
+            return validate_diff_response(text)
     except urllib.error.HTTPError as exc:
         raise SystemExit(f"GitHub request failed with HTTP {exc.code}: {url}") from exc
     except urllib.error.URLError as exc:
         raise SystemExit(f"GitHub request failed: {exc.reason}") from exc
+
+
+def validate_diff_response(text: str) -> str:
+    stripped = text.lstrip()
+    if stripped.startswith("<"):
+        raise SystemExit("GitHub returned HTML instead of a diff; check authentication or PR visibility.")
+    if stripped.startswith("{"):
+        try:
+            payload = json.loads(stripped)
+        except json.JSONDecodeError:
+            payload = {}
+        message = payload.get("message") if isinstance(payload, dict) else None
+        detail = f": {message}" if message else "."
+        raise SystemExit(f"GitHub returned JSON instead of a diff{detail}")
+    if not stripped.startswith("diff --git "):
+        raise SystemExit("GitHub response did not look like a PR diff; check the PR URL, authentication, or rate limits.")
+    return text
 
 
 def strip_prefix(value: str, prefix: str) -> str:
@@ -80,13 +100,13 @@ def strip_prefix(value: str, prefix: str) -> str:
 
 def parse_diff(owner: str, repo: str, number: str, raw_diff: str) -> PullRequestDiff:
     title = f"{owner}/{repo}#{number}"
-    files: list[ChangedFile] = []
-    current_path: str | None = None
-    fallback_path: str | None = None
+    files: List[ChangedFile] = []
+    current_path: Optional[str] = None
+    fallback_path: Optional[str] = None
     added = 0
     deleted = 0
     in_hunk = False
-    added_lines: list[str] = []
+    added_lines: List[str] = []
 
     def finish_file() -> None:
         nonlocal current_path, fallback_path, added, deleted, in_hunk
@@ -142,9 +162,9 @@ def summarize_files(files: Iterable[ChangedFile]) -> str:
     return f"The diff changes {len(file_list)} file(s), with {total_added} added and {total_deleted} deleted line(s). The largest changes are in {names}."
 
 
-def detect_risks(pr: PullRequestDiff) -> list[str]:
+def detect_risks(pr: PullRequestDiff) -> List[str]:
     haystack = review_haystack(pr)
-    risks: list[str] = []
+    risks: List[str] = []
     for label, pattern in RISKY_PATTERNS:
         if pattern.search(haystack):
             risks.append(f"- Review {label}; the diff contains related paths or commands.")
@@ -160,9 +180,9 @@ def detect_risks(pr: PullRequestDiff) -> list[str]:
     return risks or ["- No major risks found in the reviewed diff."]
 
 
-def suggestions(pr: PullRequestDiff) -> list[str]:
+def suggestions(pr: PullRequestDiff) -> List[str]:
     haystack = review_haystack(pr)
-    items: list[str] = []
+    items: List[str] = []
     if not has_test_file(pr):
         items.append("- Add a small focused test or sample output that exercises the main changed behavior.")
     if re.search(r"(?i)(cli|argparse|command)", haystack):

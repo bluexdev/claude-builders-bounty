@@ -10,6 +10,8 @@ From the repository root:
 chmod +x claude-review
 ```
 
+Requires Python 3.8 or newer.
+
 Optional for private repositories or higher GitHub rate limits:
 
 ```bash
@@ -36,8 +38,8 @@ The companion Claude Code sub-agent definition lives at `.claude/agents/pr-revie
 
 ```bash
 python agents/pr-reviewer/test_claude_review.py
-python agents/pr-reviewer/claude_review.py --pr https://github.com/claude-builders-bounty/claude-builders-bounty/pull/2400 --output agents/pr-reviewer/examples/pr-2400-review.md
-python agents/pr-reviewer/claude_review.py --pr https://github.com/claude-builders-bounty/claude-builders-bounty/pull/2401 --output agents/pr-reviewer/examples/pr-2401-review.md
+./claude-review --pr https://github.com/claude-builders-bounty/claude-builders-bounty/pull/2400 --output agents/pr-reviewer/examples/pr-2400-review.md
+./claude-review --pr https://github.com/claude-builders-bounty/claude-builders-bounty/pull/2401 --output agents/pr-reviewer/examples/pr-2401-review.md
 python -m compileall agents/pr-reviewer
 ```
 

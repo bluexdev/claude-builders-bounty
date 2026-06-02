@@ -103,10 +103,35 @@ index 1111111..2222222 100644
     assert not any("destructive shell" in risk for risk in review.detect_risks(parsed))
 
 
+def test_risk_detection_catches_shell_variants() -> None:
+    raw = """diff --git a/deploy.sh b/deploy.sh
+index 1111111..2222222 100644
+--- a/deploy.sh
++++ b/deploy.sh
+@@ -0,0 +1,3 @@
++rm -r -f build
++rm --recursive --force dist
++git push --force origin main
+"""
+    parsed = review.parse_diff("owner", "repo", "6", raw)
+    assert any("destructive shell" in risk for risk in review.detect_risks(parsed))
+
+
+def test_validate_diff_response_rejects_json_payload() -> None:
+    try:
+        review.validate_diff_response('{"message":"API rate limit exceeded"}')
+    except SystemExit as exc:
+        assert "API rate limit exceeded" in str(exc)
+    else:
+        raise AssertionError("Expected JSON API payload to be rejected")
+
+
 def main() -> int:
     test_parse_paths_and_counts()
     test_test_detection_uses_paths_only()
     test_risks_use_added_lines_not_removed_lines()
+    test_risk_detection_catches_shell_variants()
+    test_validate_diff_response_rejects_json_payload()
     print("All PR reviewer checks passed.")
     return 0
 
