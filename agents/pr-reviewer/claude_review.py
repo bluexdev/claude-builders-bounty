@@ -16,12 +16,13 @@ from typing import Iterable
 
 PR_RE = re.compile(r"^https://github\.com/([^/]+)/([^/]+)/pull/(\d+)(?:[/?#].*)?$")
 RISKY_PATTERNS = (
-    ("SQL data destruction handling", re.compile(r"(?i)(drop\s+table|truncate|delete\s+from|sql|sqlite|db/)")),
-    ("authentication or authorization changes", re.compile(r"(?i)(auth|session|permission|role|token)")),
-    ("billing or payment changes", re.compile(r"(?i)(billing|stripe|invoice|payment|checkout)")),
-    ("destructive shell or git operations", re.compile(r"(?i)(rm\s+-rf|git\s+push\s+--force|drop\s+table|truncate)")),
-    ("secret or environment handling", re.compile(r"(?i)(secret|api[_-]?key|process\.env|\.env)")),
+    ("SQL data destruction handling", re.compile(r"(?i)\b(drop\s+table|truncate\s+(?:table\s+)?\w+|delete\s+from)\b")),
+    ("authentication or authorization changes", re.compile(r"(?i)\b(auth|session|permission|role|jwt|oauth)\b")),
+    ("billing or payment changes", re.compile(r"(?i)\b(billing|stripe|invoice|payment|checkout)\b")),
+    ("destructive shell or git operations", re.compile(r"(?i)\b(rm\s+[^;&|\n]*-[^\s;&|]*r[^\s;&|]*f|git\s+push\b[^\n;&|]*(?:--force|-f\b))")),
+    ("secret or environment handling", re.compile(r"(?i)\b(secret|api[_-]?key|process\.env|env\.)\b|\.env\b")),
 )
+TEST_PATH_RE = re.compile(r"(?i)(^|/)(test_[^/]*|[^/]*(_test|\\.test|\\.spec)|__tests__|tests?)(/|\\.|$)")
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,7 @@ class PullRequestDiff:
     number: str
     title: str
     files: tuple[ChangedFile, ...]
+    added_lines: tuple[str, ...]
     raw_diff: str
 
 
@@ -48,15 +50,22 @@ def parse_pr_url(url: str) -> tuple[str, str, str]:
     return match.group(1), match.group(2), match.group(3)
 
 
-def fetch_text(url: str) -> str:
-    headers = {"User-Agent": "claude-review/1.0"}
+def fetch_diff(owner: str, repo: str, number: str) -> str:
+    headers = {
+        "Accept": "application/vnd.github.v3.diff",
+        "User-Agent": "claude-review/1.0",
+    }
     token = os.environ.get("GITHUB_TOKEN")
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}"
     request = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            return response.read().decode("utf-8", errors="replace")
+            text = response.read().decode("utf-8", errors="replace")
+            if text.lstrip().startswith("<"):
+                raise SystemExit("GitHub returned HTML instead of a diff; check authentication or PR visibility.")
+            return text
     except urllib.error.HTTPError as exc:
         raise SystemExit(f"GitHub request failed with HTTP {exc.code}: {url}") from exc
     except urllib.error.URLError as exc:
@@ -67,30 +76,53 @@ def parse_diff(owner: str, repo: str, number: str, raw_diff: str) -> PullRequest
     title = f"{owner}/{repo}#{number}"
     files: list[ChangedFile] = []
     current_path: str | None = None
+    fallback_path: str | None = None
     added = 0
     deleted = 0
+    in_hunk = False
+    added_lines: list[str] = []
+
+    def finish_file() -> None:
+        nonlocal current_path, fallback_path, added, deleted, in_hunk
+        path = current_path or fallback_path
+        if path is not None:
+            files.append(ChangedFile(path, added, deleted))
+        current_path = None
+        fallback_path = None
+        added = 0
+        deleted = 0
+        in_hunk = False
 
     for line in raw_diff.splitlines():
         if line.startswith("diff --git "):
-            if current_path is not None:
-                files.append(ChangedFile(current_path, added, deleted))
-            current_path = line.split(" b/", 1)[-1]
-            added = 0
-            deleted = 0
+            finish_file()
+            fallback_path = line.rsplit(" ", 1)[-1].removeprefix("b/")
             continue
-        if current_path is None:
+        if line.startswith("+++ "):
+            marker = line[4:]
+            if marker == "/dev/null":
+                current_path = fallback_path
+            elif marker.startswith("b/"):
+                current_path = marker[2:]
             continue
-        if line.startswith("+++") or line.startswith("---"):
+        if line.startswith("--- "):
+            continue
+        if line.startswith("@@ "):
+            in_hunk = True
+            continue
+        if not in_hunk:
+            continue
+        if line.startswith("\\"):
             continue
         if line.startswith("+"):
             added += 1
+            added_lines.append(line[1:])
         elif line.startswith("-"):
             deleted += 1
 
-    if current_path is not None:
-        files.append(ChangedFile(current_path, added, deleted))
+    finish_file()
 
-    return PullRequestDiff(owner, repo, number, title, tuple(files), raw_diff)
+    return PullRequestDiff(owner, repo, number, title, tuple(files), tuple(added_lines), raw_diff)
 
 
 def summarize_files(files: Iterable[ChangedFile]) -> str:
@@ -105,13 +137,13 @@ def summarize_files(files: Iterable[ChangedFile]) -> str:
 
 
 def detect_risks(pr: PullRequestDiff) -> list[str]:
-    haystack = "\n".join(file.path for file in pr.files) + "\n" + pr.raw_diff
+    haystack = review_haystack(pr)
     risks: list[str] = []
     for label, pattern in RISKY_PATTERNS:
         if pattern.search(haystack):
             risks.append(f"- Review {label}; the diff contains related paths or commands.")
 
-    if not re.search(r"(?i)(test|spec|__tests__|pytest|unittest)", haystack):
+    if not has_test_file(pr):
         risks.append("- No test file or test command change is visible, so behavior may rely on manual verification.")
 
     large_files = [file for file in pr.files if file.added + file.deleted > 250]
@@ -123,9 +155,9 @@ def detect_risks(pr: PullRequestDiff) -> list[str]:
 
 
 def suggestions(pr: PullRequestDiff) -> list[str]:
-    haystack = "\n".join(file.path for file in pr.files) + "\n" + pr.raw_diff
+    haystack = review_haystack(pr)
     items: list[str] = []
-    if not re.search(r"(?i)(test|spec|__tests__|pytest|unittest)", haystack):
+    if not has_test_file(pr):
         items.append("- Add a small focused test or sample output that exercises the main changed behavior.")
     if re.search(r"(?i)(cli|argparse|command)", haystack):
         items.append("- Document the exact CLI invocation and at least one expected output snippet.")
@@ -136,6 +168,16 @@ def suggestions(pr: PullRequestDiff) -> list[str]:
     if not items:
         items.append("- Keep the PR scoped to the current behavior and add a regression example if a bug motivated it.")
     return items
+
+
+def review_haystack(pr: PullRequestDiff) -> str:
+    paths = "\n".join(file.path for file in pr.files)
+    additions = "\n".join(pr.added_lines)
+    return f"{paths}\n{additions}"
+
+
+def has_test_file(pr: PullRequestDiff) -> bool:
+    return any(TEST_PATH_RE.search(file.path) for file in pr.files)
 
 
 def confidence(pr: PullRequestDiff) -> str:
@@ -174,7 +216,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     owner, repo, number = parse_pr_url(args.pr)
-    raw_diff = fetch_text(f"https://github.com/{owner}/{repo}/pull/{number}.diff")
+    raw_diff = fetch_diff(owner, repo, number)
     pr = parse_diff(owner, repo, number, raw_diff)
     review = render_review(pr, args.pr)
 
