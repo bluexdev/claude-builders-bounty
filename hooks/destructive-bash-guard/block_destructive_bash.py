@@ -18,7 +18,7 @@ BLOCK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "Recursive forced rm is blocked by the destructive Bash guard.",
         re.compile(
-            r"(?is)(?:^|[\s;&|()])rm\s+"
+            r"(?is)(?:^|[\s;&|()'\"])rm\s+"
             r"(?=[^;&|\n]*?(?:--recursive\b|-[^\s;&|]*r))"
             r"(?=[^;&|\n]*?(?:--force\b|-[^\s;&|]*f))"
         ),
@@ -100,10 +100,17 @@ def sql_statement_from(command: str, start: int) -> str:
     return command[start:]
 
 
+def strip_sql_comments(statement: str) -> str:
+    statement = re.sub(r"(?is)/\*.*?\*/", " ", statement)
+    statement = re.sub(r"(?m)--[^\n]*", " ", statement)
+    return statement
+
+
 def delete_from_without_where(command: str) -> str | None:
     for match in re.finditer(r"(?is)\bdelete\s+from\b", command):
         statement = sql_statement_from(command, match.start())
-        if not re.search(r"(?i)\bwhere\b", statement):
+        uncommented = strip_sql_comments(statement)
+        if not re.search(r"(?i)\bwhere\b", uncommented):
             return "DELETE FROM without a WHERE clause is blocked by the destructive Bash guard."
     return None
 

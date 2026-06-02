@@ -29,6 +29,7 @@ BLOCKED = [
     "rm --recursive --force build",
     "rm -r --force build",
     "rm --force -r build",
+    'bash -c "rm -rf build"',
     "psql -c 'DROP TABLE users'",
     "sqlite3 app.db 'TRUNCATE TABLE audit_log'",
     "git push --force origin main",
@@ -36,6 +37,8 @@ BLOCKED = [
     "git push --force-with-lease origin main",
     "sqlite3 app.db 'DELETE FROM users'",
     "sqlite3 app.db 'DELETE FROM users' | grep where",
+    "sqlite3 app.db 'DELETE FROM users -- where'",
+    "sqlite3 app.db 'DELETE FROM users /* where */'",
 ]
 
 ALLOWED = [

@@ -91,6 +91,16 @@ def reject_symlink(path: Path) -> None:
         raise SystemExit(f"Refusing to overwrite symlinked hook path: {path}")
 
 
+def fsync_directory(directory: Path) -> None:
+    if os.name == "nt":
+        return
+    fd = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def install_hook_file(source: Path, destination: Path) -> None:
     reject_symlink(destination)
     fd, temp_name = tempfile.mkstemp(prefix=f".{HOOK_NAME}.", suffix=".tmp", dir=destination.parent)
@@ -102,6 +112,7 @@ def install_hook_file(source: Path, destination: Path) -> None:
             temp_path.chmod(0o755)
         reject_symlink(destination)
         os.replace(temp_path, destination)
+        fsync_directory(destination.parent)
     finally:
         if temp_path.exists():
             temp_path.unlink()
@@ -124,6 +135,7 @@ def write_settings_atomic(settings_path: Path, settings: dict[str, Any]) -> None
         if os.name != "nt":
             temp_path.chmod(existing_mode)
         os.replace(temp_path, settings_path)
+        fsync_directory(settings_path.parent)
     finally:
         if temp_path.exists():
             temp_path.unlink()
