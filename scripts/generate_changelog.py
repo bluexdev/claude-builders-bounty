@@ -16,6 +16,15 @@ from typing import Dict, List, Optional
 CATEGORIES = ("Added", "Fixed", "Changed", "Removed")
 
 
+class GitCommandError(Exception):
+    def __init__(self, args: List[str], stdout: str, stderr: str) -> None:
+        self.args_list = args
+        self.stdout = stdout
+        self.stderr = stderr
+        message = stderr.strip() or stdout.strip() or "unknown git error"
+        super().__init__(f"git {' '.join(args)} failed: {message}")
+
+
 @dataclass(frozen=True)
 class Commit:
     sha: str
@@ -28,13 +37,13 @@ def run_git(args: List[str], repo: Path) -> str:
             ["git", *args],
             cwd=repo,
             check=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
     except subprocess.CalledProcessError as exc:
-        message = exc.stderr.strip() or exc.stdout.strip() or str(exc)
-        raise SystemExit(f"git {' '.join(args)} failed: {message}") from exc
+        raise GitCommandError(args, exc.stdout or "", exc.stderr or "") from exc
     return completed.stdout.strip()
 
 
@@ -46,8 +55,11 @@ def find_repo_root(start: Path) -> Path:
 def last_tag(repo: Path) -> Optional[str]:
     try:
         tag = run_git(["describe", "--tags", "--abbrev=0"], repo)
-    except SystemExit:
-        return None
+    except GitCommandError as exc:
+        output = f"{exc.stderr}\n{exc.stdout}".lower()
+        if "no names found" in output or "no tags can describe" in output:
+            return None
+        raise
     return tag or None
 
 
@@ -131,11 +143,14 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    args = parse_args()
-    repo = find_repo_root(Path.cwd())
-    tag = last_tag(repo)
-    commits = commits_since(repo, tag)
-    changelog = render_changelog(commits, tag)
+    try:
+        args = parse_args()
+        repo = find_repo_root(Path.cwd())
+        tag = last_tag(repo)
+        commits = commits_since(repo, tag)
+        changelog = render_changelog(commits, tag)
+    except GitCommandError as exc:
+        raise SystemExit(str(exc)) from exc
 
     if args.print:
         print(changelog, end="")

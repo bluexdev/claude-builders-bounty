@@ -26,7 +26,7 @@ You're in the right place.
 
 | # | Task | Amount | Status |
 |---|------|--------|--------|
-| [#1](../../issues/1) | SKILL: Generate a CHANGELOG from git history | $50 | 🟢 Open |
+| [#1](https://github.com/claude-builders-bounty/claude-builders-bounty/issues/1) | SKILL: Generate a CHANGELOG from git history | $50 | 🟢 Open |
 | [#2](../../issues/2) | TEMPLATE: CLAUDE.md for a Next.js + SQLite project | $75 | 🟢 Open |
 | [#3](../../issues/3) | HOOK: Block destructive bash commands in Claude Code | $100 | 🟢 Open |
 | [#4](../../issues/4) | AGENT: PR reviewer with structured Markdown output | $150 | 🟢 Open |
@@ -36,7 +36,7 @@ You're in the right place.
 
 ## Generate a changelog
 
-This repository includes a small changelog generator for bounty [#1](../../issues/1).
+This repository includes a small changelog generator for bounty [#1](https://github.com/claude-builders-bounty/claude-builders-bounty/issues/1).
 It reads commits since the latest git tag, groups them into `Added`, `Fixed`,
 `Changed`, and `Removed`, then writes a formatted `CHANGELOG.md`.
 
