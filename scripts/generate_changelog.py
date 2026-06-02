@@ -15,6 +15,10 @@ from typing import Dict, List, Optional
 
 CATEGORIES = ("Added", "Fixed", "Changed", "Removed")
 DEFAULT_MAX_COMMITS_WITHOUT_TAG = 200
+CONVENTIONAL_PREFIX_RE = re.compile(r"^\w+(?:\([^)]+\))?!?:\s*")
+ADDED_RE = re.compile(r"\b(add|adds|added|new|introduce|implement)\b")
+FIXED_RE = re.compile(r"\b(fix|fixed|bug|patch|resolve|repair)\b")
+REMOVED_RE = re.compile(r"\b(remove|removed|delete|deleted|drop|dropped|deprecate)\b")
 
 
 class GitCommandError(Exception):
@@ -80,7 +84,7 @@ def commits_since(repo: Path, tag: Optional[str], max_count_without_tag: int) ->
 
 
 def clean_subject(subject: str) -> str:
-    subject = re.sub(r"^\w+(?:\([^)]+\))?!?:\s*", "", subject).strip()
+    subject = CONVENTIONAL_PREFIX_RE.sub("", subject).strip()
     return subject[:1].upper() + subject[1:] if subject else subject
 
 
@@ -88,11 +92,11 @@ def categorize(subject: str) -> str:
     lowered = subject.lower()
     prefix = lowered.split(":", 1)[0]
 
-    if prefix.startswith(("feat", "add")) or re.search(r"\b(add|adds|added|new|introduce|implement)\b", lowered):
+    if prefix.startswith(("feat", "add")) or ADDED_RE.search(lowered):
         return "Added"
-    if prefix.startswith(("fix", "bug", "hotfix")) or re.search(r"\b(fix|fixed|bug|patch|resolve|repair)\b", lowered):
+    if prefix.startswith(("fix", "bug", "hotfix")) or FIXED_RE.search(lowered):
         return "Fixed"
-    if prefix.startswith(("remove", "delete", "drop")) or re.search(r"\b(remove|removed|delete|deleted|drop|dropped|deprecate)\b", lowered):
+    if prefix.startswith(("remove", "delete", "drop")) or REMOVED_RE.search(lowered):
         return "Removed"
     return "Changed"
 
