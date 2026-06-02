@@ -99,7 +99,7 @@ def render_changelog(commits: list[Commit], tag: str | None) -> str:
 
     if not commits:
         lines.extend(["No commits found for this range.", ""])
-        return "\n".join(lines)
+        return "\n".join(lines).rstrip() + "\n"
 
     for category in CATEGORIES:
         lines.append(f"### {category}")
@@ -110,7 +110,7 @@ def render_changelog(commits: list[Commit], tag: str | None) -> str:
             lines.append("- No changes.")
         lines.append("")
 
-    return "\n".join(lines)
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def parse_args() -> argparse.Namespace:
@@ -137,7 +137,7 @@ def main() -> int:
     changelog = render_changelog(commits, tag)
 
     if args.print:
-        print(changelog)
+        print(changelog, end="")
         return 0
 
     output = Path(args.output)

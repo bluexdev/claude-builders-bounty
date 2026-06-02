@@ -4,9 +4,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 PYTHON_CMD=()
-for candidate in python3 python "py -3"; do
-  if $candidate --version >/dev/null 2>&1; then
-    read -r -a PYTHON_CMD <<< "$candidate"
+PYTHON_CANDIDATES=("python3" "python" "py -3")
+
+for candidate in "${PYTHON_CANDIDATES[@]}"; do
+  read -r -a candidate_cmd <<< "$candidate"
+  if "${candidate_cmd[@]}" --version >/dev/null 2>&1; then
+    PYTHON_CMD=("${candidate_cmd[@]}")
     break
   fi
 done
