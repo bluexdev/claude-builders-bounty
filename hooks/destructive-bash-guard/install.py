@@ -31,14 +31,37 @@ def load_settings(path: Path) -> dict[str, Any]:
 
 
 def merge_hook(settings: dict[str, Any], command: str) -> dict[str, Any]:
-    hooks = settings.setdefault("hooks", {})
-    pre_tool_use = hooks.setdefault("PreToolUse", [])
+    hooks_value = settings.get("hooks")
+    if hooks_value is None:
+        hooks: dict[str, Any] = {}
+        settings["hooks"] = hooks
+    elif isinstance(hooks_value, dict):
+        hooks = hooks_value
+    else:
+        raise SystemExit('Expected "hooks" in settings.json to be a JSON object.')
+
+    pre_tool_use_value = hooks.get("PreToolUse")
+    if pre_tool_use_value is None:
+        pre_tool_use: list[Any] = []
+        hooks["PreToolUse"] = pre_tool_use
+    elif isinstance(pre_tool_use_value, list):
+        pre_tool_use = pre_tool_use_value
+    else:
+        raise SystemExit('Expected "hooks.PreToolUse" in settings.json to be a list.')
+
     hook_entry = {"type": "command", "command": command}
 
     for existing in pre_tool_use:
         if not isinstance(existing, dict) or existing.get("matcher") != "Bash":
             continue
-        existing_hooks = existing.setdefault("hooks", [])
+        existing_hooks_value = existing.get("hooks")
+        if existing_hooks_value is None:
+            existing_hooks: list[Any] = []
+            existing["hooks"] = existing_hooks
+        elif isinstance(existing_hooks_value, list):
+            existing_hooks = existing_hooks_value
+        else:
+            raise SystemExit('Expected existing Bash "hooks" in settings.json to be a list.')
         if any(hook == hook_entry for hook in existing_hooks):
             return settings
         existing_hooks.append(hook_entry)

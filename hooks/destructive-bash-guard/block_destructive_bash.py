@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import datetime as dt
+import errno
 import json
 import os
 import re
+import stat
 import sys
 from pathlib import Path
 from typing import Any
@@ -124,8 +126,36 @@ def redact_command(command: str) -> str:
     return command
 
 
+def log_file_path() -> Path:
+    return Path.home() / ".claude" / "hooks" / "blocked.log"
+
+
+def open_log_for_append(log_path: Path) -> int:
+    flags = os.O_APPEND | os.O_CREAT | os.O_WRONLY
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if nofollow:
+        flags |= nofollow
+    try:
+        fd = os.open(log_path, flags, 0o600)
+    except OSError as exc:
+        if nofollow and exc.errno in (errno.ELOOP, errno.EMLINK):
+            raise SystemExit(f"Refusing to write log through symlink: {log_path}") from exc
+        raise
+
+    try:
+        if os.name != "nt":
+            file_stat = os.fstat(fd)
+            if not stat.S_ISREG(file_stat.st_mode):
+                raise SystemExit(f"Refusing to write log because it is not a regular file: {log_path}")
+            os.fchmod(fd, 0o600)
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
 def log_block(command: str, cwd: str, reason: str) -> None:
-    log_path = Path.home() / ".claude" / "hooks" / "blocked.log"
+    log_path = log_file_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)
     entry = {
         "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -134,14 +164,11 @@ def log_block(command: str, cwd: str, reason: str) -> None:
         "attempted_command": redact_command(command),
     }
     line = (json.dumps(entry, ensure_ascii=False) + "\n").encode("utf-8")
-    flags = os.O_APPEND | os.O_CREAT | os.O_WRONLY
-    fd = os.open(log_path, flags, 0o600)
+    fd = open_log_for_append(log_path)
     try:
         os.write(fd, line)
     finally:
         os.close(fd)
-    if os.name != "nt":
-        log_path.chmod(0o600)
 
 
 def deny(reason: str) -> None:

@@ -32,7 +32,7 @@ Every blocked command is appended to:
 
 Each JSONL entry includes `timestamp`, `attempted_command`, `project_path`, and `reason`.
 
-The log is created with user-only permissions on POSIX systems (`0600`). The hook also redacts common inline secrets such as bearer tokens, `API_KEY=...`, `password=...`, and credentials embedded in URLs before writing the command.
+The log is created with user-only permissions on POSIX systems (`0600`). Existing POSIX log files are forced back to `0600`, and symlinked log paths are rejected where the platform exposes the needed safeguards. The hook also redacts common inline secrets such as bearer tokens, `API_KEY=...`, `password=...`, and credentials embedded in URLs before writing the command.
 
 ## Manual Checks
 
