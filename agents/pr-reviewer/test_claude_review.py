@@ -60,6 +60,14 @@ def test_parse_paths_and_counts() -> None:
     assert "\\ No newline at end of file" not in parsed.added_lines
 
 
+def test_path_from_diff_header_uses_first_separator() -> None:
+    assert (
+        review.path_from_diff_header("diff --git a/src/old name.py b/src/new b name.py")
+        == "src/new b name.py"
+    )
+    assert review.path_from_diff_header("not a diff header") is None
+
+
 def test_test_detection_uses_paths_only() -> None:
     parsed = review.parse_diff("owner", "repo", "1", SAMPLE_DIFF)
     assert review.has_test_file(parsed)
@@ -161,6 +169,7 @@ def test_http_error_includes_github_message() -> None:
 
 def main() -> int:
     test_parse_paths_and_counts()
+    test_path_from_diff_header_uses_first_separator()
     test_test_detection_uses_paths_only()
     test_risks_use_added_lines_not_removed_lines()
     test_risk_detection_catches_shell_variants()

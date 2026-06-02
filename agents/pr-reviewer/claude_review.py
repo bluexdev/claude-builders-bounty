@@ -28,7 +28,8 @@ RISKY_PATTERNS = (
     ("secret or environment handling", re.compile(r"(?i)\b(secret|api[_-]?key|process\.env|env\.)\b|\.env\b")),
 )
 TEST_PATH_RE = re.compile(r"(?i)(^|/)(test_[^/]*|[^/]*(_test|\.test|\.spec)|__tests__|tests?)(/|\.|$)")
-DIFF_HEADER_RE = re.compile(r"^diff --git a/(.*) b/(.*)$")
+DIFF_HEADER_PREFIX = "diff --git a/"
+DIFF_HEADER_SEPARATOR = " b/"
 
 
 @dataclass(frozen=True)
@@ -126,10 +127,12 @@ def strip_prefix(value: str, prefix: str) -> str:
 
 
 def path_from_diff_header(line: str) -> Optional[str]:
-    match = DIFF_HEADER_RE.match(line)
-    if match:
-        return match.group(2)
-    return None
+    if not line.startswith(DIFF_HEADER_PREFIX):
+        return None
+    rest = line[len(DIFF_HEADER_PREFIX):]
+    if DIFF_HEADER_SEPARATOR not in rest:
+        return None
+    return rest.split(DIFF_HEADER_SEPARATOR, 1)[1]
 
 
 def parse_diff(owner: str, repo: str, number: str, raw_diff: str) -> PullRequestDiff:

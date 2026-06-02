@@ -37,10 +37,10 @@ The companion Claude Code sub-agent definition lives at `.claude/agents/pr-revie
 ## Verification
 
 ```bash
-python agents/pr-reviewer/test_claude_review.py
+python3 agents/pr-reviewer/test_claude_review.py
 ./claude-review --pr https://github.com/claude-builders-bounty/claude-builders-bounty/pull/2400 --output agents/pr-reviewer/examples/pr-2400-review.md
 ./claude-review --pr https://github.com/claude-builders-bounty/claude-builders-bounty/pull/2401 --output agents/pr-reviewer/examples/pr-2401-review.md
-python -m compileall agents/pr-reviewer
+python3 -m compileall agents/pr-reviewer
 ```
 
 Sample outputs are included in `agents/pr-reviewer/examples/`.
