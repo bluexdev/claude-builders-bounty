@@ -106,11 +106,15 @@ def strip_sql_comments(statement: str) -> str:
     return statement
 
 
+def strip_sql_strings(statement: str) -> str:
+    return re.sub(r"(?is)'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"", " ", statement)
+
+
 def delete_from_without_where(command: str) -> str | None:
     for match in re.finditer(r"(?is)\bdelete\s+from\b", command):
         statement = sql_statement_from(command, match.start())
-        uncommented = strip_sql_comments(statement)
-        if not re.search(r"(?i)\bwhere\b", uncommented):
+        searchable = strip_sql_strings(strip_sql_comments(statement))
+        if not re.search(r"(?i)\bwhere\b", searchable):
             return "DELETE FROM without a WHERE clause is blocked by the destructive Bash guard."
     return None
 
@@ -137,6 +141,22 @@ def log_file_path() -> Path:
     return Path.home() / ".claude" / "hooks" / "blocked.log"
 
 
+def validate_opened_log_path(log_path: Path, fd: int) -> None:
+    file_stat = os.fstat(fd)
+    if not stat.S_ISREG(file_stat.st_mode):
+        raise SystemExit(f"Refusing to write log because it is not a regular file: {log_path}")
+
+    try:
+        path_stat = log_path.lstat()
+    except FileNotFoundError as exc:
+        raise SystemExit(f"Refusing to write log because path changed during open: {log_path}") from exc
+
+    if stat.S_ISLNK(path_stat.st_mode) or not os.path.samestat(path_stat, file_stat):
+        raise SystemExit(f"Refusing to write log because path changed during open: {log_path}")
+
+    os.fchmod(fd, 0o600)
+
+
 def open_log_for_append(log_path: Path) -> int:
     flags = os.O_APPEND | os.O_CREAT | os.O_WRONLY
     cloexec = getattr(os, "O_CLOEXEC", 0)
@@ -160,10 +180,7 @@ def open_log_for_append(log_path: Path) -> int:
 
     try:
         if os.name != "nt":
-            file_stat = os.fstat(fd)
-            if not stat.S_ISREG(file_stat.st_mode):
-                raise SystemExit(f"Refusing to write log because it is not a regular file: {log_path}")
-            os.fchmod(fd, 0o600)
+            validate_opened_log_path(log_path, fd)
         return fd
     except BaseException:
         os.close(fd)

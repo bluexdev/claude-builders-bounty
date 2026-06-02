@@ -39,6 +39,8 @@ BLOCKED = [
     "sqlite3 app.db 'DELETE FROM users' | grep where",
     "sqlite3 app.db 'DELETE FROM users -- where'",
     "sqlite3 app.db 'DELETE FROM users /* where */'",
+    "sqlite3 app.db \"DELETE FROM users 'where'\"",
+    "sqlite3 app.db \"DELETE FROM users \"\"where\"\"\"",
 ]
 
 ALLOWED = [
@@ -48,6 +50,7 @@ ALLOWED = [
     "truncate audit_log",
     "python manage.py migrate",
     "sqlite3 app.db 'DELETE FROM users WHERE id = 1'",
+    "sqlite3 app.db \"DELETE FROM users WHERE note = 'where'\"",
     "git push origin main",
 ]
 
@@ -138,6 +141,36 @@ def test_log_block_rejects_symlink() -> None:
             guard.log_file_path = original_log_file_path
 
 
+def test_log_block_rejects_path_swap_after_open() -> None:
+    if os.name == "nt":
+        return
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        log_path = Path(tmpdir) / "blocked.log"
+        original_log_file_path = guard.log_file_path
+        original_open = guard.os.open
+
+        def swapping_open(path, flags, mode=0o777):
+            fd = original_open(path, flags, mode)
+            if Path(path) == log_path:
+                log_path.unlink()
+                log_path.write_text("replacement\n", encoding="utf-8")
+            return fd
+
+        guard.log_file_path = lambda: log_path
+        guard.os.open = swapping_open
+        try:
+            try:
+                guard.log_block("rm -rf build", "/tmp/project", "blocked")
+            except SystemExit as exc:
+                assert "path changed" in str(exc).lower()
+            else:
+                raise AssertionError("expected swapped log path to be rejected")
+        finally:
+            guard.os.open = original_open
+            guard.log_file_path = original_log_file_path
+
+
 def main() -> int:
     test_blocked_commands()
     test_allowed_commands()
@@ -147,6 +180,7 @@ def main() -> int:
     test_installer_rejects_symlink_destination()
     test_write_settings_atomic_preserves_valid_json()
     test_log_block_rejects_symlink()
+    test_log_block_rejects_path_swap_after_open()
     print("All destructive Bash guard checks passed.")
     return 0
 
