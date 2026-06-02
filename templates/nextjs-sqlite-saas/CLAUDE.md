@@ -31,6 +31,10 @@ pnpm db:migrate
 If a command is missing, add it to `package.json` before using a substitute.
 Reason: Claude should improve the project contract instead of inventing one-off local commands.
 
+`pnpm db:migrate` must run a checked-in migration runner, preferably `tsx scripts/migrate.ts`.
+The runner reads `src/db/migrations/*.sql` in filename order, creates a `_migrations` ledger table, applies each new file inside a transaction, and records `filename`, `checksum`, and `applied_at`. If an already-applied filename has a different checksum, fail instead of rewriting history.
+Reason: every contributor and deploy target must apply the same schema sequence with the same safety guarantees.
+
 ## Folder Structure
 
 Prefer this shape:
@@ -113,6 +117,19 @@ const envSchema = z.object({
 });
 
 export const env = envSchema.parse(process.env);
+```
+
+## Deployment Rules
+
+- Use `better-sqlite3` only on the Node.js runtime with a persistent filesystem.
+  Reason: native bindings cannot run on Edge, and ephemeral/serverless disks are unsafe for production persistence.
+- For Vercel Edge, serverless-only, or managed multi-region deploys, use Turso/libSQL or another hosted SQLite-compatible service.
+  Reason: the database has to survive cold starts, redeploys, and horizontal scaling.
+- Mark route handlers that touch local SQLite as Node runtime only.
+  Reason: runtime intent should be explicit at the file boundary.
+
+```ts
+export const runtime = "nodejs";
 ```
 
 ## SQL And Migration Conventions
