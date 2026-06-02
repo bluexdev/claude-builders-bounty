@@ -70,9 +70,10 @@ def last_tag(repo: Path) -> Optional[str]:
 
 def commits_since(repo: Path, tag: Optional[str], max_count_without_tag: int) -> List[Commit]:
     revision = f"{tag}..HEAD" if tag else "HEAD"
-    args = ["log", revision, "--pretty=format:%h%x09%s"]
+    args = ["log"]
     if tag is None and max_count_without_tag > 0:
-        args.insert(2, f"--max-count={max_count_without_tag}")
+        args.append(f"--max-count={max_count_without_tag}")
+    args.extend([revision, "--pretty=format:%h%x09%s"])
     raw = run_git(args, repo)
     commits: List[Commit] = []
     for line in raw.splitlines():
@@ -106,7 +107,7 @@ def render_changelog(commits: List[Commit], tag: Optional[str], history_limit: O
     if tag:
         source_label = f"from commits since {tag}"
     elif history_limit:
-        source_label = "from recent repository history"
+        source_label = f"from the last {history_limit} commits in repository history"
     else:
         source_label = "from repository history"
 

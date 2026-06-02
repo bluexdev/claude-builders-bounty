@@ -2,7 +2,7 @@
 
 ## Unreleased - YYYY-MM-DD
 
-_Generated from recent repository history._
+_Generated from the last N commits in repository history._
 
 ### Added
 - Initial README with bounty board (1aeae2a)
