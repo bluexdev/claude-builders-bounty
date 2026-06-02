@@ -231,8 +231,19 @@ def test_validate_diff_response_rejects_json_payload() -> None:
         review.validate_diff_response('{"message":"API rate limit exceeded"}')
     except SystemExit as exc:
         assert "API rate limit exceeded" in str(exc)
+        assert str(exc).endswith(".")
     else:
         raise AssertionError("Expected JSON API payload to be rejected")
+
+
+def test_validate_diff_response_explains_json_without_message() -> None:
+    try:
+        review.validate_diff_response('{"errors":["missing"]}')
+    except SystemExit as exc:
+        assert "message field" in str(exc)
+        assert "authentication" in str(exc)
+    else:
+        raise AssertionError("Expected JSON API payload without message to be rejected")
 
 
 def test_parse_pr_url_includes_invalid_input() -> None:
@@ -255,6 +266,32 @@ def test_http_error_includes_github_message() -> None:
     formatted = review.format_http_error(error, error.url)
     assert "HTTP 403" in formatted
     assert "API rate limit exceeded" in formatted
+    assert ". URL: https://api.github.test/repos/o/r/pulls/1" in formatted
+
+
+def test_http_error_explains_json_without_message() -> None:
+    error = urllib.error.HTTPError(
+        url="https://api.github.test/repos/o/r/pulls/1",
+        code=404,
+        msg="Not Found",
+        hdrs=None,
+        fp=io.BytesIO(b'{"errors":["missing"]}'),
+    )
+    formatted = review.format_http_error(error, error.url)
+    assert "message field" in formatted
+    assert "PR visibility" in formatted
+
+
+def test_github_headers_use_classic_token_scheme() -> None:
+    previous = review.os.environ.get("GITHUB_TOKEN")
+    review.os.environ["GITHUB_TOKEN"] = "example-token"
+    try:
+        assert review.github_headers()["Authorization"] == "token example-token"
+    finally:
+        if previous is None:
+            review.os.environ.pop("GITHUB_TOKEN", None)
+        else:
+            review.os.environ["GITHUB_TOKEN"] = previous
 
 
 def main() -> int:
@@ -268,8 +305,11 @@ def main() -> int:
     test_suggestions_cover_each_heuristic_branch()
     test_confidence_boundaries()
     test_validate_diff_response_rejects_json_payload()
+    test_validate_diff_response_explains_json_without_message()
     test_parse_pr_url_includes_invalid_input()
     test_http_error_includes_github_message()
+    test_http_error_explains_json_without_message()
+    test_github_headers_use_classic_token_scheme()
     print("All PR reviewer checks passed.")
     return 0
 

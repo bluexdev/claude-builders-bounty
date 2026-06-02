@@ -13,7 +13,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 
 if sys.version_info < (3, 8):
@@ -63,16 +63,20 @@ def parse_pr_url(url: str) -> Tuple[str, str, str]:
     return match.group(1), match.group(2), match.group(3)
 
 
-def fetch_diff(owner: str, repo: str, number: str) -> str:
+def github_headers() -> Dict[str, str]:
     headers = {
         "Accept": "application/vnd.github.v3.diff",
         "User-Agent": "claude-review/1.0",
     }
     token = os.environ.get("GITHUB_TOKEN")
     if token:
-        headers["Authorization"] = f"Bearer {token}"
+        headers["Authorization"] = f"token {token}"
+    return headers
+
+
+def fetch_diff(owner: str, repo: str, number: str) -> str:
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}"
-    request = urllib.request.Request(url, headers=headers)
+    request = urllib.request.Request(url, headers=github_headers())
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             text = response.read().decode("utf-8", errors="replace")
@@ -106,8 +110,13 @@ def format_http_error(exc: urllib.error.HTTPError, url: str) -> str:
     except Exception:
         body = ""
     message = github_json_message(body.lstrip()) if body else None
-    detail = f": {message}" if message else ""
-    return f"GitHub request failed with HTTP {exc.code}{detail}: {url}"
+    if message:
+        detail = f": {message.rstrip('.')}"
+    elif body.lstrip().startswith("{"):
+        detail = ": JSON error payload did not include a message field; check authentication, PR visibility, or rate limits"
+    else:
+        detail = ""
+    return f"GitHub request failed with HTTP {exc.code}{detail}. URL: {url}"
 
 
 def validate_diff_response(text: str) -> str:
@@ -116,8 +125,11 @@ def validate_diff_response(text: str) -> str:
         raise SystemExit("GitHub returned HTML instead of a diff; check authentication or PR visibility.")
     if stripped.startswith("{"):
         message = github_json_message(stripped)
-        detail = f": {message}" if message else "."
-        raise SystemExit(f"GitHub returned JSON instead of a diff{detail}")
+        if message:
+            detail = f": {message.rstrip('.')}"
+        else:
+            detail = ": JSON payload did not include a message field; check authentication, PR visibility, or rate limits"
+        raise SystemExit(f"GitHub returned JSON instead of a diff{detail}.")
     if not stripped.startswith("diff --git "):
         raise SystemExit("GitHub response did not look like a PR diff; check the PR URL, authentication, or rate limits.")
     return text
@@ -264,7 +276,7 @@ def render_review(pr: PullRequestDiff, pr_url: str) -> str:
     return (
         "## Summary\n"
         f"This review covers [{pr.title}]({pr_url}). {summary} "
-        "The review is based on the public GitHub diff and focuses on implementation risk, test coverage, and maintainability.\n\n"
+        "The review is based on the GitHub diff and focuses on implementation risk, test coverage, and maintainability.\n\n"
         "## Identified Risks\n"
         f"{risks}\n\n"
         "## Improvement Suggestions\n"

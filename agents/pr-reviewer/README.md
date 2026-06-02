@@ -1,6 +1,6 @@
 # PR Reviewer Agent
 
-Claude Code sub-agent and CLI for bounty #4. It accepts a GitHub pull request URL, reads the public diff, and returns a structured Markdown review comment.
+Claude Code sub-agent and CLI for bounty #4. It accepts a GitHub pull request URL, reads the PR diff from GitHub, and returns a structured Markdown review comment.
 
 ## Setup
 
@@ -32,7 +32,7 @@ The output always includes:
 - Improvement suggestions.
 - Confidence score: Low, Medium, or High.
 
-The companion Claude Code sub-agent definition lives at `.claude/agents/pr-reviewer.md`. Use the sub-agent when you want Claude Code to reason over the same structure with repository context; use the CLI when you want a deterministic review comment from a public PR URL.
+The companion Claude Code sub-agent definition lives at `.claude/agents/pr-reviewer.md`. Use the sub-agent when you want Claude Code to reason over the same structure with repository context; use the CLI when you want a deterministic review comment from a GitHub PR URL.
 
 ## Verification
 
