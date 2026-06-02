@@ -94,7 +94,19 @@ def reject_symlink(path: Path) -> None:
 def fsync_directory(directory: Path) -> None:
     if os.name == "nt":
         return
-    fd = os.open(directory, os.O_RDONLY)
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0)
+    fd = os.open(directory, flags)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def fsync_file(path: Path) -> None:
+    if os.name == "nt":
+        return
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+    fd = os.open(path, flags)
     try:
         os.fsync(fd)
     finally:
@@ -110,6 +122,7 @@ def install_hook_file(source: Path, destination: Path) -> None:
         shutil.copy2(source, temp_path)
         if os.name != "nt":
             temp_path.chmod(0o755)
+            fsync_file(temp_path)
         reject_symlink(destination)
         os.replace(temp_path, destination)
         fsync_directory(destination.parent)

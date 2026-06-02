@@ -87,9 +87,9 @@ def test_installer_rejects_unexpected_settings_shapes() -> None:
 
 
 def test_installer_uses_current_python() -> None:
-    command = installer.hook_command(Path("/tmp/block_destructive_bash.py"))
-    assert Path(sys.executable).name in command
-    assert "block_destructive_bash.py" in command
+    destination = Path("/tmp/block_destructive_bash.py")
+    command = installer.hook_command(destination)
+    assert command == installer.command_string([sys.executable, str(destination)])
 
 
 def test_installer_rejects_symlink_destination() -> None:
