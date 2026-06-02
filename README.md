@@ -26,17 +26,17 @@ You're in the right place.
 
 | # | Task | Amount | Status |
 |---|------|--------|--------|
-| [#1](https://github.com/claude-builders-bounty/claude-builders-bounty/issues/1) | SKILL: Generate a CHANGELOG from git history | $50 | 🟢 Open |
-| [#2](https://github.com/claude-builders-bounty/claude-builders-bounty/issues/2) | TEMPLATE: CLAUDE.md for a Next.js + SQLite project | $75 | 🟢 Open |
-| [#3](https://github.com/claude-builders-bounty/claude-builders-bounty/issues/3) | HOOK: Block destructive bash commands in Claude Code | $100 | 🟢 Open |
-| [#4](https://github.com/claude-builders-bounty/claude-builders-bounty/issues/4) | AGENT: PR reviewer with structured Markdown output | $150 | 🟢 Open |
-| [#5](https://github.com/claude-builders-bounty/claude-builders-bounty/issues/5) | WORKFLOW: n8n + Claude API — automated weekly dev summary | $200 | 🟢 Open |
+| [#1](issues/1) | SKILL: Generate a CHANGELOG from git history | $50 | 🟢 Open |
+| [#2](issues/2) | TEMPLATE: CLAUDE.md for a Next.js + SQLite project | $75 | 🟢 Open |
+| [#3](issues/3) | HOOK: Block destructive bash commands in Claude Code | $100 | 🟢 Open |
+| [#4](issues/4) | AGENT: PR reviewer with structured Markdown output | $150 | 🟢 Open |
+| [#5](issues/5) | WORKFLOW: n8n + Claude API — automated weekly dev summary | $200 | 🟢 Open |
 
 ---
 
 ## Generate a changelog
 
-This repository includes a small changelog generator for bounty [#1](https://github.com/claude-builders-bounty/claude-builders-bounty/issues/1).
+This repository includes a small changelog generator for bounty [#1](issues/1).
 It reads commits since the latest git tag, groups them into `Added`, `Fixed`,
 `Changed`, and `Removed`, then writes a formatted `CHANGELOG.md`.
 
@@ -48,8 +48,9 @@ Setup in 3 steps:
 
 Optional: use `bash changelog.sh --print` to preview output or
 `bash changelog.sh --output path/to/CHANGELOG.md` to choose a file.
-When the repository has no tags, the generator reads the latest 200 commits by
-default; use `bash changelog.sh --max-count 0` to include full history.
+When the repository has no tags, the generator reads a bounded recent commit
+history by default; use `bash changelog.sh --max-count N` to choose the bound or
+`bash changelog.sh --max-count 0` to include full history.
 
 ---
 

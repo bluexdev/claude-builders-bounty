@@ -15,7 +15,7 @@ from typing import Dict, List, Optional
 
 CATEGORIES = ("Added", "Fixed", "Changed", "Removed")
 DEFAULT_MAX_COMMITS_WITHOUT_TAG = 200
-CONVENTIONAL_PREFIX_RE = re.compile(r"^\w+(?:\([^)]+\))?!?:\s*")
+CONVENTIONAL_PREFIX_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*(?:\([^)]+\))?!?:\s*")
 ADDED_RE = re.compile(r"\b(add|adds|added|new|introduce|implement)\b")
 FIXED_RE = re.compile(r"\b(fix|fixed|bug|patch|resolve|repair)\b")
 REMOVED_RE = re.compile(r"\b(remove|removed|delete|deleted|drop|dropped|deprecate)\b")
@@ -106,7 +106,7 @@ def render_changelog(commits: List[Commit], tag: Optional[str], history_limit: O
     if tag:
         source_label = f"from commits since {tag}"
     elif history_limit:
-        source_label = f"from the latest {history_limit} commits in repository history"
+        source_label = "from recent repository history"
     else:
         source_label = "from repository history"
 
