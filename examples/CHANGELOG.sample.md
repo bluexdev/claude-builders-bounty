@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased - 2026-06-02
+## Unreleased - YYYY-MM-DD
 
-_Generated from commits from repository history._
+_Generated from commits from repository history. The date is filled in at runtime._
 
 ### Added
 - Initial README with bounty board (1aeae2a)

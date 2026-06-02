@@ -10,6 +10,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Dict, List, Optional
 
 
 CATEGORIES = ("Added", "Fixed", "Changed", "Removed")
@@ -21,7 +22,7 @@ class Commit:
     subject: str
 
 
-def run_git(args: list[str], repo: Path) -> str:
+def run_git(args: List[str], repo: Path) -> str:
     try:
         completed = subprocess.run(
             ["git", *args],
@@ -42,7 +43,7 @@ def find_repo_root(start: Path) -> Path:
     return Path(root)
 
 
-def last_tag(repo: Path) -> str | None:
+def last_tag(repo: Path) -> Optional[str]:
     try:
         tag = run_git(["describe", "--tags", "--abbrev=0"], repo)
     except SystemExit:
@@ -50,10 +51,10 @@ def last_tag(repo: Path) -> str | None:
     return tag or None
 
 
-def commits_since(repo: Path, tag: str | None) -> list[Commit]:
+def commits_since(repo: Path, tag: Optional[str]) -> List[Commit]:
     revision = f"{tag}..HEAD" if tag else "HEAD"
     raw = run_git(["log", revision, "--pretty=format:%h%x09%s"], repo)
-    commits: list[Commit] = []
+    commits: List[Commit] = []
     for line in raw.splitlines():
         if not line.strip():
             continue
@@ -80,11 +81,11 @@ def categorize(subject: str) -> str:
     return "Changed"
 
 
-def render_changelog(commits: list[Commit], tag: str | None) -> str:
+def render_changelog(commits: List[Commit], tag: Optional[str]) -> str:
     today = dt.date.today().isoformat()
     compare_label = f"since {tag}" if tag else "from repository history"
 
-    grouped: dict[str, list[Commit]] = {category: [] for category in CATEGORIES}
+    grouped: Dict[str, List[Commit]] = {category: [] for category in CATEGORIES}
     for commit in commits:
         grouped[categorize(commit.subject)].append(commit)
 

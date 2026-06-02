@@ -42,8 +42,8 @@ It reads commits since the latest git tag, groups them into `Added`, `Fixed`,
 
 Setup in 3 steps:
 
-1. Clone the repository and make sure `git` and Python 3 are installed.
-2. Run `bash changelog.sh` from the repository root.
+1. Clone the repository and make sure `git` and Python 3.8+ are installed.
+2. Run `bash changelog.sh`; it may be launched from any directory.
 3. Review the generated `CHANGELOG.md`; see `examples/CHANGELOG.sample.md` for sample output.
 
 Optional: use `bash changelog.sh --print` to preview output or
