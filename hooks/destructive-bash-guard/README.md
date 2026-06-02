@@ -10,7 +10,7 @@ Run this from the repository root:
 python3 hooks/destructive-bash-guard/install.py
 ```
 
-The installer copies `block_destructive_bash.py` into `~/.claude/hooks/` and adds the `PreToolUse` Bash matcher shown in `settings.example.json` to `~/.claude/settings.json`.
+The installer copies `block_destructive_bash.py` into `~/.claude/hooks/` and adds a `PreToolUse` Bash matcher to `~/.claude/settings.json` using the copied hook's absolute path. `settings.example.json` shows the shape for manual installs.
 
 ## What It Blocks
 
@@ -31,6 +31,8 @@ Every blocked command is appended to:
 ```
 
 Each JSONL entry includes `timestamp`, `attempted_command`, `project_path`, and `reason`.
+
+The log is created with user-only permissions on POSIX systems (`0600`). The hook also redacts common inline secrets such as bearer tokens, `API_KEY=...`, `password=...`, and credentials embedded in URLs before writing the command.
 
 ## Manual Checks
 

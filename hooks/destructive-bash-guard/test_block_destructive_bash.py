@@ -3,7 +3,15 @@
 
 from __future__ import annotations
 
-import block_destructive_bash as guard
+import importlib.util
+from pathlib import Path
+
+
+MODULE_PATH = Path(__file__).with_name("block_destructive_bash.py")
+SPEC = importlib.util.spec_from_file_location("block_destructive_bash", MODULE_PATH)
+assert SPEC and SPEC.loader
+guard = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(guard)
 
 
 BLOCKED = [
@@ -31,11 +39,27 @@ ALLOWED = [
 ]
 
 
-def main() -> int:
+def test_blocked_commands() -> None:
     for command in BLOCKED:
         assert guard.block_reason(command), f"expected blocked: {command}"
+
+
+def test_allowed_commands() -> None:
     for command in ALLOWED:
         assert guard.block_reason(command) is None, f"expected allowed: {command}"
+
+
+def test_redacts_secrets() -> None:
+    redacted = guard.redact_command("curl -H 'Bearer sk-test' https://user:pass@example.com API_KEY=abc123")
+    assert "sk-test" not in redacted
+    assert "abc123" not in redacted
+    assert "user:pass" not in redacted
+
+
+def main() -> int:
+    test_blocked_commands()
+    test_allowed_commands()
+    test_redacts_secrets()
     print("All destructive Bash guard checks passed.")
     return 0
 

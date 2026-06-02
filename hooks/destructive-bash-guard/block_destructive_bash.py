@@ -113,6 +113,17 @@ def block_reason(command: str) -> str | None:
     return delete_from_without_where(command)
 
 
+def redact_command(command: str) -> str:
+    command = re.sub(r"(?i)\b(bearer)\s+[\w.:\-+/=]+", r"\1 [REDACTED]", command)
+    command = re.sub(
+        r"(?i)\b(token|api[_-]?key|password|passwd|secret)=('[^']*'|\"[^\"]*\"|[^\s;&|]+)",
+        r"\1=[REDACTED]",
+        command,
+    )
+    command = re.sub(r"(?i)(https?://)([^/\s:@]+):([^@\s/]+)@", r"\1[REDACTED]:[REDACTED]@", command)
+    return command
+
+
 def log_block(command: str, cwd: str, reason: str) -> None:
     log_path = Path.home() / ".claude" / "hooks" / "blocked.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -120,10 +131,17 @@ def log_block(command: str, cwd: str, reason: str) -> None:
         "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
         "project_path": cwd,
         "reason": reason,
-        "attempted_command": command,
+        "attempted_command": redact_command(command),
     }
-    with log_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    line = (json.dumps(entry, ensure_ascii=False) + "\n").encode("utf-8")
+    flags = os.O_APPEND | os.O_CREAT | os.O_WRONLY
+    fd = os.open(log_path, flags, 0o600)
+    try:
+        os.write(fd, line)
+    finally:
+        os.close(fd)
+    if os.name != "nt":
+        log_path.chmod(0o600)
 
 
 def deny(reason: str) -> None:
