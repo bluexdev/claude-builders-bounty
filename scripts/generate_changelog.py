@@ -14,6 +14,7 @@ from typing import Dict, List, Optional
 
 
 CATEGORIES = ("Added", "Fixed", "Changed", "Removed")
+DEFAULT_MAX_COMMITS_WITHOUT_TAG = 200
 
 
 class GitCommandError(Exception):
@@ -63,9 +64,12 @@ def last_tag(repo: Path) -> Optional[str]:
     return tag or None
 
 
-def commits_since(repo: Path, tag: Optional[str]) -> List[Commit]:
+def commits_since(repo: Path, tag: Optional[str], max_count_without_tag: int) -> List[Commit]:
     revision = f"{tag}..HEAD" if tag else "HEAD"
-    raw = run_git(["log", revision, "--pretty=format:%h%x09%s"], repo)
+    args = ["log", revision, "--pretty=format:%h%x09%s"]
+    if tag is None and max_count_without_tag > 0:
+        args.insert(2, f"--max-count={max_count_without_tag}")
+    raw = run_git(args, repo)
     commits: List[Commit] = []
     for line in raw.splitlines():
         if not line.strip():
@@ -93,9 +97,14 @@ def categorize(subject: str) -> str:
     return "Changed"
 
 
-def render_changelog(commits: List[Commit], tag: Optional[str]) -> str:
+def render_changelog(commits: List[Commit], tag: Optional[str], history_limit: Optional[int] = None) -> str:
     today = dt.date.today().isoformat()
-    compare_label = f"since {tag}" if tag else "from repository history"
+    if tag:
+        source_label = f"from commits since {tag}"
+    elif history_limit:
+        source_label = f"from the latest {history_limit} commits in repository history"
+    else:
+        source_label = "from repository history"
 
     grouped: Dict[str, List[Commit]] = {category: [] for category in CATEGORIES}
     for commit in commits:
@@ -106,7 +115,7 @@ def render_changelog(commits: List[Commit], tag: Optional[str]) -> str:
         "",
         f"## Unreleased - {today}",
         "",
-        f"_Generated from commits {compare_label}._",
+        f"_Generated {source_label}._",
         "",
     ]
 
@@ -136,8 +145,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--print",
+        dest="print_changelog",
         action="store_true",
         help="Print changelog to stdout instead of writing a file.",
+    )
+    parser.add_argument(
+        "--max-count",
+        type=int,
+        default=DEFAULT_MAX_COMMITS_WITHOUT_TAG,
+        help="Maximum commits to read when the repo has no tags; use 0 for full history.",
     )
     return parser.parse_args()
 
@@ -145,14 +161,17 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     try:
         args = parse_args()
+        if args.max_count < 0:
+            raise SystemExit("--max-count must be 0 or greater.")
         repo = find_repo_root(Path.cwd())
         tag = last_tag(repo)
-        commits = commits_since(repo, tag)
-        changelog = render_changelog(commits, tag)
+        commits = commits_since(repo, tag, args.max_count)
+        history_limit = args.max_count if tag is None and args.max_count > 0 else None
+        changelog = render_changelog(commits, tag, history_limit)
     except GitCommandError as exc:
         raise SystemExit(str(exc)) from exc
 
-    if args.print:
+    if args.print_changelog:
         print(changelog, end="")
         return 0
 
