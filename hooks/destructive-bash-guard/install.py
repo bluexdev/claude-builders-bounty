@@ -5,7 +5,12 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
+import stat
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -13,8 +18,14 @@ from typing import Any
 HOOK_NAME = "block_destructive_bash.py"
 
 
+def command_string(args: list[str]) -> str:
+    if os.name == "nt":
+        return subprocess.list2cmdline(args)
+    return " ".join(shlex.quote(arg) for arg in args)
+
+
 def hook_command(destination: Path) -> str:
-    return f'python3 "{destination}"'
+    return command_string([sys.executable, str(destination)])
 
 
 def load_settings(path: Path) -> dict[str, Any]:
@@ -71,6 +82,31 @@ def merge_hook(settings: dict[str, Any], command: str) -> dict[str, Any]:
     return settings
 
 
+def reject_symlink(path: Path) -> None:
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        return
+    if stat.S_ISLNK(mode):
+        raise SystemExit(f"Refusing to overwrite symlinked hook path: {path}")
+
+
+def install_hook_file(source: Path, destination: Path) -> None:
+    reject_symlink(destination)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{HOOK_NAME}.", suffix=".tmp", dir=destination.parent)
+    os.close(fd)
+    temp_path = Path(temp_name)
+    try:
+        shutil.copy2(source, temp_path)
+        if os.name != "nt":
+            temp_path.chmod(0o755)
+        reject_symlink(destination)
+        os.replace(temp_path, destination)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
 def main() -> int:
     source = Path(__file__).with_name(HOOK_NAME)
     claude_dir = Path.home() / ".claude"
@@ -78,9 +114,7 @@ def main() -> int:
     hook_dir.mkdir(parents=True, exist_ok=True)
 
     destination = hook_dir / HOOK_NAME
-    shutil.copy2(source, destination)
-    if os.name != "nt":
-        destination.chmod(0o755)
+    install_hook_file(source, destination)
 
     settings_path = claude_dir / "settings.json"
     settings = merge_hook(load_settings(settings_path), hook_command(destination))

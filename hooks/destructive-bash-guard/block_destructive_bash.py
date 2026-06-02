@@ -132,9 +132,18 @@ def log_file_path() -> Path:
 
 def open_log_for_append(log_path: Path) -> int:
     flags = os.O_APPEND | os.O_CREAT | os.O_WRONLY
+    cloexec = getattr(os, "O_CLOEXEC", 0)
+    if cloexec:
+        flags |= cloexec
     nofollow = getattr(os, "O_NOFOLLOW", 0)
     if nofollow:
         flags |= nofollow
+    try:
+        existing_mode = log_path.lstat().st_mode
+    except FileNotFoundError:
+        existing_mode = None
+    if existing_mode is not None and stat.S_ISLNK(existing_mode):
+        raise SystemExit(f"Refusing to write log through symlink: {log_path}")
     try:
         fd = os.open(log_path, flags, 0o600)
     except OSError as exc:

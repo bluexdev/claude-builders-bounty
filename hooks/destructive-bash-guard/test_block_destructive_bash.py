@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -77,6 +78,32 @@ def test_installer_rejects_unexpected_settings_shapes() -> None:
             raise AssertionError(f"expected invalid settings shape to fail: {invalid}")
 
 
+def test_installer_uses_current_python() -> None:
+    command = installer.hook_command(Path("/tmp/block_destructive_bash.py"))
+    assert Path(sys.executable).name in command
+    assert "block_destructive_bash.py" in command
+
+
+def test_installer_rejects_symlink_destination() -> None:
+    if os.name == "nt" or not hasattr(os, "symlink"):
+        return
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        source = tmp_path / "source.py"
+        source.write_text("print('hook')\n", encoding="utf-8")
+        target = tmp_path / "target.py"
+        destination = tmp_path / "block_destructive_bash.py"
+        os.symlink(target, destination)
+
+        try:
+            installer.install_hook_file(source, destination)
+        except SystemExit as exc:
+            assert "symlink" in str(exc).lower()
+        else:
+            raise AssertionError("expected symlink destination to be rejected")
+
+
 def test_log_block_rejects_symlink() -> None:
     if os.name == "nt" or not hasattr(os, "symlink"):
         return
@@ -104,6 +131,8 @@ def main() -> int:
     test_allowed_commands()
     test_redacts_secrets()
     test_installer_rejects_unexpected_settings_shapes()
+    test_installer_uses_current_python()
+    test_installer_rejects_symlink_destination()
     test_log_block_rejects_symlink()
     print("All destructive Bash guard checks passed.")
     return 0
