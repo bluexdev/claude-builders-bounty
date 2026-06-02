@@ -1,5 +1,5 @@
 ## Summary
-This review covers [claude-builders-bounty/claude-builders-bounty#2401](https://github.com/claude-builders-bounty/claude-builders-bounty/pull/2401). The diff changes 5 file(s), with 379 added and 0 deleted line(s). The largest changes are in hooks/destructive-bash-guard/block_destructive_bash.py, hooks/destructive-bash-guard/install.py, hooks/destructive-bash-guard/test_block_destructive_bash.py. The review is based on the public GitHub diff and focuses on implementation risk, test coverage, and maintainability.
+This review covers [claude-builders-bounty/claude-builders-bounty#2401](https://github.com/claude-builders-bounty/claude-builders-bounty/pull/2401). The diff changes 5 file(s), with 474 added and 0 deleted line(s). The largest changes are in hooks/destructive-bash-guard/block_destructive_bash.py, hooks/destructive-bash-guard/test_block_destructive_bash.py, hooks/destructive-bash-guard/install.py. The review is based on the public GitHub diff and focuses on implementation risk, test coverage, and maintainability.
 
 ## Identified Risks
 - Review SQL data destruction handling; the diff contains related paths or commands.

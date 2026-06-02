@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+import io
+import urllib.error
+
 import claude_review as review
 
 
@@ -35,6 +38,13 @@ index 4444444..0000000
 @@ -1,2 +0,0 @@
 -removed
 -content
+diff --git a/src/old report.md b/src/old report.md
+deleted file mode 100644
+index 5555555..0000000
+--- a/src/old report.md
++++ /dev/null
+@@ -1 +0,0 @@
+-legacy note
 """
 
 
@@ -44,8 +54,9 @@ def test_parse_paths_and_counts() -> None:
         "src/new name.py",
         "tests/test_new_name.py",
         "src/delete_me.py",
+        "src/old report.md",
     ]
-    assert [(file.added, file.deleted) for file in parsed.files] == [(2, 1), (2, 0), (0, 2)]
+    assert [(file.added, file.deleted) for file in parsed.files] == [(2, 1), (2, 0), (0, 2), (0, 1)]
     assert "\\ No newline at end of file" not in parsed.added_lines
 
 
@@ -126,12 +137,36 @@ def test_validate_diff_response_rejects_json_payload() -> None:
         raise AssertionError("Expected JSON API payload to be rejected")
 
 
+def test_parse_pr_url_includes_invalid_input() -> None:
+    try:
+        review.parse_pr_url("https://github.com/owner/repo/issues/123\n")
+    except SystemExit as exc:
+        assert "issues/123" in str(exc)
+    else:
+        raise AssertionError("Expected invalid PR URL to be rejected")
+
+
+def test_http_error_includes_github_message() -> None:
+    error = urllib.error.HTTPError(
+        url="https://api.github.test/repos/o/r/pulls/1",
+        code=403,
+        msg="Forbidden",
+        hdrs=None,
+        fp=io.BytesIO(b'{"message":"API rate limit exceeded"}'),
+    )
+    formatted = review.format_http_error(error, error.url)
+    assert "HTTP 403" in formatted
+    assert "API rate limit exceeded" in formatted
+
+
 def main() -> int:
     test_parse_paths_and_counts()
     test_test_detection_uses_paths_only()
     test_risks_use_added_lines_not_removed_lines()
     test_risk_detection_catches_shell_variants()
     test_validate_diff_response_rejects_json_payload()
+    test_parse_pr_url_includes_invalid_input()
+    test_http_error_includes_github_message()
     print("All PR reviewer checks passed.")
     return 0
 

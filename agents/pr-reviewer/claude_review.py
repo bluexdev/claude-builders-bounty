@@ -28,6 +28,7 @@ RISKY_PATTERNS = (
     ("secret or environment handling", re.compile(r"(?i)\b(secret|api[_-]?key|process\.env|env\.)\b|\.env\b")),
 )
 TEST_PATH_RE = re.compile(r"(?i)(^|/)(test_[^/]*|[^/]*(_test|\.test|\.spec)|__tests__|tests?)(/|\.|$)")
+DIFF_HEADER_RE = re.compile(r"^diff --git a/(.*) b/(.*)$")
 
 
 @dataclass(frozen=True)
@@ -51,7 +52,10 @@ class PullRequestDiff:
 def parse_pr_url(url: str) -> Tuple[str, str, str]:
     match = PR_RE.match(url)
     if not match:
-        raise SystemExit("Expected a GitHub PR URL like https://github.com/owner/repo/pull/123")
+        raise SystemExit(
+            "Expected a GitHub PR URL like https://github.com/owner/repo/pull/123; "
+            f"got {short_text(url)!r}"
+        )
     return match.group(1), match.group(2), match.group(3)
 
 
@@ -70,9 +74,36 @@ def fetch_diff(owner: str, repo: str, number: str) -> str:
             text = response.read().decode("utf-8", errors="replace")
             return validate_diff_response(text)
     except urllib.error.HTTPError as exc:
-        raise SystemExit(f"GitHub request failed with HTTP {exc.code}: {url}") from exc
+        raise SystemExit(format_http_error(exc, url)) from exc
     except urllib.error.URLError as exc:
         raise SystemExit(f"GitHub request failed: {exc.reason}") from exc
+
+
+def short_text(value: str, limit: int = 120) -> str:
+    compact = value.replace("\r", "\\r").replace("\n", "\\n")
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 3] + "..."
+
+
+def github_json_message(text: str) -> Optional[str]:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(payload, dict) and isinstance(payload.get("message"), str):
+        return payload["message"]
+    return None
+
+
+def format_http_error(exc: urllib.error.HTTPError, url: str) -> str:
+    try:
+        body = exc.read().decode("utf-8", errors="replace")
+    except Exception:
+        body = ""
+    message = github_json_message(body.lstrip()) if body else None
+    detail = f": {message}" if message else ""
+    return f"GitHub request failed with HTTP {exc.code}{detail}: {url}"
 
 
 def validate_diff_response(text: str) -> str:
@@ -80,11 +111,7 @@ def validate_diff_response(text: str) -> str:
     if stripped.startswith("<"):
         raise SystemExit("GitHub returned HTML instead of a diff; check authentication or PR visibility.")
     if stripped.startswith("{"):
-        try:
-            payload = json.loads(stripped)
-        except json.JSONDecodeError:
-            payload = {}
-        message = payload.get("message") if isinstance(payload, dict) else None
+        message = github_json_message(stripped)
         detail = f": {message}" if message else "."
         raise SystemExit(f"GitHub returned JSON instead of a diff{detail}")
     if not stripped.startswith("diff --git "):
@@ -96,6 +123,13 @@ def strip_prefix(value: str, prefix: str) -> str:
     if value.startswith(prefix):
         return value[len(prefix):]
     return value
+
+
+def path_from_diff_header(line: str) -> Optional[str]:
+    match = DIFF_HEADER_RE.match(line)
+    if match:
+        return match.group(2)
+    return None
 
 
 def parse_diff(owner: str, repo: str, number: str, raw_diff: str) -> PullRequestDiff:
@@ -122,7 +156,7 @@ def parse_diff(owner: str, repo: str, number: str, raw_diff: str) -> PullRequest
     for line in raw_diff.splitlines():
         if line.startswith("diff --git "):
             finish_file()
-            fallback_path = strip_prefix(line.rsplit(" ", 1)[-1], "b/")
+            fallback_path = path_from_diff_header(line) or strip_prefix(line.rsplit(" ", 1)[-1], "b/")
             continue
         if line.startswith("+++ "):
             marker = line[4:]
