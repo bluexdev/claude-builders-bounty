@@ -107,6 +107,28 @@ def install_hook_file(source: Path, destination: Path) -> None:
             temp_path.unlink()
 
 
+def write_settings_atomic(settings_path: Path, settings: dict[str, Any]) -> None:
+    try:
+        existing_mode = settings_path.stat().st_mode & 0o777
+    except FileNotFoundError:
+        existing_mode = 0o600
+
+    fd, temp_name = tempfile.mkstemp(prefix=".settings.", suffix=".tmp", dir=settings_path.parent)
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(settings, handle, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        if os.name != "nt":
+            temp_path.chmod(existing_mode)
+        os.replace(temp_path, settings_path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
 def main() -> int:
     source = Path(__file__).with_name(HOOK_NAME)
     claude_dir = Path.home() / ".claude"
@@ -118,9 +140,7 @@ def main() -> int:
 
     settings_path = claude_dir / "settings.json"
     settings = merge_hook(load_settings(settings_path), hook_command(destination))
-    with settings_path.open("w", encoding="utf-8") as handle:
-        json.dump(settings, handle, indent=2)
-        handle.write("\n")
+    write_settings_atomic(settings_path, settings)
 
     print(f"Installed {destination}")
     print(f"Updated {settings_path}")

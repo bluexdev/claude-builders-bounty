@@ -16,7 +16,7 @@ The installer copies `block_destructive_bash.py` into `~/.claude/hooks/` and add
 
 - Recursive forced `rm`, including `rm -rf`, `rm -fr`, `rm --recursive --force`, and mixed short/long flag variants.
 - `DROP TABLE`.
-- SQL `TRUNCATE` statements such as `TRUNCATE users` or `TRUNCATE TABLE users`.
+- SQL `TRUNCATE TABLE ...` statements.
 - `git push --force`, `git push -f`, and `git push --force-with-lease`.
 - `DELETE FROM ...` statements that do not include a `WHERE` clause before the statement terminator.
 

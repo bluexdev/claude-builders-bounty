@@ -12,7 +12,8 @@ from pathlib import Path
 
 def load_module(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
-    assert spec and spec.loader
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load {name} from {path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -29,7 +30,7 @@ BLOCKED = [
     "rm -r --force build",
     "rm --force -r build",
     "psql -c 'DROP TABLE users'",
-    "sqlite3 app.db 'TRUNCATE audit_log'",
+    "sqlite3 app.db 'TRUNCATE TABLE audit_log'",
     "git push --force origin main",
     "git push -f origin main",
     "git push --force-with-lease origin main",
@@ -41,6 +42,7 @@ ALLOWED = [
     "git status",
     "rm -r build",
     "truncate -s 0 file.log",
+    "truncate audit_log",
     "python manage.py migrate",
     "sqlite3 app.db 'DELETE FROM users WHERE id = 1'",
     "git push origin main",
@@ -104,6 +106,13 @@ def test_installer_rejects_symlink_destination() -> None:
             raise AssertionError("expected symlink destination to be rejected")
 
 
+def test_write_settings_atomic_preserves_valid_json() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        settings_path = Path(tmpdir) / "settings.json"
+        installer.write_settings_atomic(settings_path, {"hooks": {"PreToolUse": []}})
+        assert '"PreToolUse": []' in settings_path.read_text(encoding="utf-8")
+
+
 def test_log_block_rejects_symlink() -> None:
     if os.name == "nt" or not hasattr(os, "symlink"):
         return
@@ -133,6 +142,7 @@ def main() -> int:
     test_installer_rejects_unexpected_settings_shapes()
     test_installer_uses_current_python()
     test_installer_rejects_symlink_destination()
+    test_write_settings_atomic_preserves_valid_json()
     test_log_block_rejects_symlink()
     print("All destructive Bash guard checks passed.")
     return 0

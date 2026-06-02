@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"/absolute/path/to/.claude/hooks/block_destructive_bash.py\""
+            "command": "\"/absolute/path/to/python\" \"/absolute/path/to/.claude/hooks/block_destructive_bash.py\""
           }
         ]
       }

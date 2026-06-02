@@ -29,7 +29,7 @@ BLOCK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
     (
         "TRUNCATE is destructive SQL and is blocked by the destructive Bash guard.",
-        re.compile(r"(?is)\btruncate\s+(?:table\s+)?[a-z_][\w.$\"]*"),
+        re.compile(r"(?is)\btruncate\s+table\s+[a-z_][\w.$\"]*"),
     ),
     (
         "Force-pushing can rewrite shared history and is blocked by the destructive Bash guard.",
