@@ -286,14 +286,14 @@ def main() -> int:
     owner, repo, number = parse_pr_url(args.pr)
     raw_diff = fetch_diff(owner, repo, number)
     pr = parse_diff(owner, repo, number, raw_diff)
-    review = render_review(pr, args.pr)
+    review_text = render_review(pr, args.pr)
 
     if args.output:
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(review, encoding="utf-8")
+        output.write_text(review_text, encoding="utf-8")
     else:
-        print(review, end="")
+        print(review_text, end="")
     return 0
 
 

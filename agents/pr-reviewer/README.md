@@ -15,7 +15,7 @@ Requires Python 3.8 or newer.
 Optional for private repositories or higher GitHub rate limits:
 
 ```bash
-export GITHUB_TOKEN=ghp_your_token_here
+export GITHUB_TOKEN=YOUR_TOKEN_HERE
 ```
 
 ## Usage

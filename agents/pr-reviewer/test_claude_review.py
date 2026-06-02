@@ -48,6 +48,18 @@ index 5555555..0000000
 """
 
 
+def pr_for(files, added_lines=()):
+    return review.PullRequestDiff(
+        owner="owner",
+        repo="repo",
+        number="99",
+        title="owner/repo#99",
+        files=tuple(files),
+        added_lines=tuple(added_lines),
+        raw_diff="",
+    )
+
+
 def test_parse_paths_and_counts() -> None:
     parsed = review.parse_diff("owner", "repo", "1", SAMPLE_DIFF)
     assert [file.path for file in parsed.files] == [
@@ -166,6 +178,40 @@ index 1111111..2222222 100644
     assert any("destructive shell" in risk for risk in review.detect_risks(parsed))
 
 
+def test_suggestions_cover_each_heuristic_branch() -> None:
+    no_test = pr_for((review.ChangedFile("src/app.py", 1, 0),), ("print('hello')",))
+    assert any("Add a small focused test" in item for item in review.suggestions(no_test))
+
+    cli = pr_for(
+        (review.ChangedFile("tests/test_cli.py", 1, 0), review.ChangedFile("src/cli.py", 1, 0)),
+        ("parser = argparse.ArgumentParser()",),
+    )
+    assert any("exact CLI invocation" in item for item in review.suggestions(cli))
+
+    sql = pr_for(
+        (review.ChangedFile("tests/test_sql.py", 1, 0), review.ChangedFile("src/db.py", 1, 0)),
+        ("cursor.execute('DELETE FROM users')",),
+    )
+    assert any("quoted SQL" in item for item in review.suggestions(sql))
+
+    shell = pr_for(
+        (review.ChangedFile("tests/test_hook.py", 1, 0), review.ChangedFile("hooks/bash_guard.py", 1, 0)),
+        ("shell = 'bash'",),
+    )
+    assert any("allowed and one denied shell example" in item for item in review.suggestions(shell))
+
+    fallback = pr_for((review.ChangedFile("tests/test_models.py", 1, 0), review.ChangedFile("src/models.py", 1, 0)))
+    assert review.suggestions(fallback) == [
+        "- Keep the PR scoped to the current behavior and add a regression example if a bug motivated it."
+    ]
+
+
+def test_confidence_boundaries() -> None:
+    assert review.confidence(pr_for(())) == "Low - The diff did not expose changed files."
+    assert review.confidence(pr_for((review.ChangedFile("src/app.py", 600, 0),))).startswith("High -")
+    assert review.confidence(pr_for((review.ChangedFile("src/app.py", 601, 0),))).startswith("Medium -")
+
+
 def test_validate_diff_response_rejects_json_payload() -> None:
     try:
         review.validate_diff_response('{"message":"API rate limit exceeded"}')
@@ -204,6 +250,8 @@ def main() -> int:
     test_risks_use_added_lines_not_removed_lines()
     test_missing_test_risk_mentions_test_files_only()
     test_risk_detection_catches_shell_variants()
+    test_suggestions_cover_each_heuristic_branch()
+    test_confidence_boundaries()
     test_validate_diff_response_rejects_json_payload()
     test_parse_pr_url_includes_invalid_input()
     test_http_error_includes_github_message()
