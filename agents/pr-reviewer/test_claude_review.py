@@ -72,6 +72,20 @@ def test_parse_paths_and_counts() -> None:
     assert "\\ No newline at end of file" not in parsed.added_lines
 
 
+def test_hunk_marker_like_content_is_counted() -> None:
+    raw = """diff --git a/docs/example.md b/docs/example.md
+index 1111111..2222222 100644
+--- a/docs/example.md
++++ b/docs/example.md
+@@ -1,2 +1,2 @@
+--- old markdown fence
++++ new markdown fence
+"""
+    parsed = review.parse_diff("owner", "repo", "8", raw)
+    assert parsed.files == (review.ChangedFile("docs/example.md", 1, 1),)
+    assert parsed.added_lines == ("++ new markdown fence",)
+
+
 def test_path_from_diff_header_uses_first_separator() -> None:
     assert (
         review.path_from_diff_header("diff --git a/src/old name.py b/src/new b name.py")
@@ -245,6 +259,7 @@ def test_http_error_includes_github_message() -> None:
 
 def main() -> int:
     test_parse_paths_and_counts()
+    test_hunk_marker_like_content_is_counted()
     test_path_from_diff_header_uses_first_separator()
     test_test_detection_uses_paths_only()
     test_risks_use_added_lines_not_removed_lines()

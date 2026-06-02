@@ -31,7 +31,7 @@ RISKY_PATTERNS = (
 TEST_PATH_RE = re.compile(
     r"(?i)(^|/)(__tests__|tests?|test_[^/]*|[^/]*_(?:test|spec)\.[^/]+|[^/]*\.(?:test|spec)\.[^/]+)(/|$)"
 )
-DIFF_HEADER_PREFIX = "diff --git a/"
+DIFF_HEADER_PREFIX = "diff --git "
 DIFF_HEADER_SEPARATOR = " b/"
 
 
@@ -124,9 +124,9 @@ def validate_diff_response(text: str) -> str:
 
 
 def path_from_diff_header(line: str) -> Optional[str]:
-    if not line.startswith("diff --git "):
+    if not line.startswith(DIFF_HEADER_PREFIX):
         return None
-    rest = line[len("diff --git "):]
+    rest = line[len(DIFF_HEADER_PREFIX):]
     if rest.startswith(("'", '"')):
         try:
             parts = shlex.split(rest)
@@ -162,9 +162,21 @@ def parse_diff(owner: str, repo: str, number: str, raw_diff: str) -> PullRequest
         in_hunk = False
 
     for line in raw_diff.splitlines():
-        if line.startswith("diff --git "):
+        if line.startswith(DIFF_HEADER_PREFIX):
             finish_file()
             fallback_path = path_from_diff_header(line)
+            continue
+        if line.startswith("@@ "):
+            in_hunk = True
+            continue
+        if in_hunk:
+            if line.startswith("\\"):
+                continue
+            if line.startswith("+"):
+                added += 1
+                added_lines.append(line[1:])
+            elif line.startswith("-"):
+                deleted += 1
             continue
         if line.startswith("+++ "):
             marker = line[4:]
@@ -175,18 +187,6 @@ def parse_diff(owner: str, repo: str, number: str, raw_diff: str) -> PullRequest
             continue
         if line.startswith("--- "):
             continue
-        if line.startswith("@@ "):
-            in_hunk = True
-            continue
-        if not in_hunk:
-            continue
-        if line.startswith("\\"):
-            continue
-        if line.startswith("+"):
-            added += 1
-            added_lines.append(line[1:])
-        elif line.startswith("-"):
-            deleted += 1
 
     finish_file()
 
