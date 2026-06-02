@@ -34,6 +34,23 @@ You're in the right place.
 
 ---
 
+## Generate a changelog
+
+This repository includes a small changelog generator for bounty [#1](../../issues/1).
+It reads commits since the latest git tag, groups them into `Added`, `Fixed`,
+`Changed`, and `Removed`, then writes a formatted `CHANGELOG.md`.
+
+Setup in 3 steps:
+
+1. Clone the repository and make sure `git` and Python 3 are installed.
+2. Run `bash changelog.sh` from the repository root.
+3. Review the generated `CHANGELOG.md`; see `examples/CHANGELOG.sample.md` for sample output.
+
+Optional: use `bash changelog.sh --print` to preview output or
+`bash changelog.sh --output path/to/CHANGELOG.md` to choose a file.
+
+---
+
 ## Rules
 
 - Tasks must be related to Claude Code or AI tooling
